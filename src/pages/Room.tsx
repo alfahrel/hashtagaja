@@ -230,8 +230,6 @@ export function Room() {
   async function initRoom() {
     setLoading(true)
     try {
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-
       const { data: existingRoom } = await supabase
         .from('rooms')
         .select('*')
@@ -244,8 +242,9 @@ export function Room() {
         const { count } = await supabase
           .from('rooms')
           .select('*', { count: 'exact', head: true })
-          .eq('creator_id', userId)
+          //.eq('creator_id', userId)
           .gte('created_at', oneHourAgo)
+
 
         if (count !== null && count >= 3) {
           setError(c.errors.roomLimitReached)
@@ -253,19 +252,19 @@ export function Room() {
           return
         }
 
-        const { error: upsertError } = await supabase
+
+        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+        const { error: insertError } = await supabase
           .from('rooms')
-          .upsert(
-            { hashtag, expires_at: expiresAt, creator_id: userId },
-            { onConflict: 'hashtag', ignoreDuplicates: true }
-          )
-        if (upsertError) throw upsertError
+          .insert({ hashtag, expires_at: expiresAt, creator_id: userId })
+        if (insertError) throw insertError
       } else if (!existingRoom.creator_id) {
         await supabase
           .from('rooms')
           .update({ creator_id: userId })
           .eq('id', existingRoom.id)
       }
+
 
       const { data: fetchedRoom, error: fetchError } = await supabase
         .from('rooms')
@@ -300,7 +299,7 @@ export function Room() {
         .from('rooms')
         .update({ expires_at: newExpiry })
         .eq('id', room.id)
-        .eq('creator_id', userId)
+        // .eq('creator_id', userId)
       if (error) throw error
       setRoom(prev => prev ? { ...prev, expires_at: newExpiry } : prev)
     } catch (err) {

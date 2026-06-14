@@ -12,8 +12,8 @@ const c = content.admin.dashboard
 function formatDate(str: string) {
   return new Date(str).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
 }
-function formatExpiry(str: string) {
-  const diff = new Date(str).getTime() - Date.now()
+function formatExpiry(str: string, now: Date) {
+  const diff = new Date(str).getTime() - now.getTime()
   if (diff < 0) return c.expired
   const h = Math.floor(diff / 3600000)
   const m = Math.floor((diff % 3600000) / 60000)
@@ -55,14 +55,14 @@ export function AdminDashboard() {
   const [confirmDelete, setConfirmDelete] = useState<{ type: 'room' | 'message' | 'rooms' | 'messages'; ids: string[]; label: string } | null>(null)
   const [deleting, setDeleting] = useState(false)
 
- // const [tick, setTick] = useState(0)
+  const [now, setNow] = useState(() => new Date())
 
   useTitle(selectedRoom ? `#${selectedRoom.hashtag} — admin` : 'admin — hashtagaja')
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
   useEffect(() => {
-    const id = setInterval(() => setTick(t => t + 1), 30000)
+    const id = setInterval(() => setNow(new Date()), 30000)
     return () => clearInterval(id)
   }, [])
 
@@ -268,11 +268,11 @@ export function AdminDashboard() {
                 <span className={styles['stat-label']}>{c.stats.rooms}</span>
               </div>
               <div className={styles.stat}>
-                <span className={styles['stat-value']}>{rooms.filter(r => new Date(r.expires_at) > new Date()).length}</span>
+                <span className={styles['stat-value']}>{rooms.filter(r => new Date(r.expires_at) > now).length}</span>
                 <span className={styles['stat-label']}>{c.stats.active}</span>
               </div>
               <div className={styles.stat}>
-                <span className={styles['stat-value']}>{rooms.filter(r => new Date(r.expires_at) <= new Date()).length}</span>
+                <span className={styles['stat-value']}>{rooms.filter(r => new Date(r.expires_at) <= now).length}</span>
                 <span className={styles['stat-label']}>{c.stats.expired}</span>
               </div>
             </div>
@@ -305,7 +305,7 @@ export function AdminDashboard() {
               ) : filteredRooms.length === 0 ? (
                 <p className={styles['sidebar-empty']}>{c.sidebarEmpty}</p>
               ) : filteredRooms.map(room => {
-                const expired = new Date(room.expires_at) <= new Date()
+                const expired = new Date(room.expires_at) <= now
                 const isSelected = selectedRoomIds.has(room.id)
                 return (
                   <div
@@ -319,7 +319,7 @@ export function AdminDashboard() {
                       </span>
                     )}
                     <span className={styles['room-item-tag']}>#{room.hashtag}</span>
-                    <span className={styles['room-item-meta']}>{expired ? c.expired : formatExpiry(room.expires_at)}</span>
+                    <span className={styles['room-item-meta']}>{expired ? c.expired : formatExpiry(room.expires_at, now)}</span>
                   </div>
                 )
               })}
@@ -366,7 +366,7 @@ export function AdminDashboard() {
                 <div className={styles['room-detail-meta']}>
                   <span>{c.room.created} {formatDate(selectedRoom.created_at)}</span>
                   <span className={styles['meta-sep']}>/</span>
-                  <span>{new Date(selectedRoom.expires_at) <= new Date() ? c.room.expired : `${c.room.expiresIn} ${formatExpiry(selectedRoom.expires_at)}`}</span>
+                  <span>{new Date(selectedRoom.expires_at) <= now ? c.room.expired : `${c.room.expiresIn} ${formatExpiry(selectedRoom.expires_at, now)}`}</span>
                   <span className={styles['meta-sep']}>/</span>
                   <span>{messages.length} {c.room.messages}</span>
                 </div>
