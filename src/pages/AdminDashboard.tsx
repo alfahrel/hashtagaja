@@ -55,7 +55,7 @@ export function AdminDashboard() {
   const [confirmDelete, setConfirmDelete] = useState<{ type: 'room' | 'message' | 'rooms' | 'messages'; ids: string[]; label: string } | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  const [tick, setTick] = useState(0)
+ // const [tick, setTick] = useState(0)
 
   useTitle(selectedRoom ? `#${selectedRoom.hashtag} — admin` : 'admin — hashtagaja')
 
