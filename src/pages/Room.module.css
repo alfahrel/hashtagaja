@@ -97,6 +97,15 @@
   min-width: 0;
   flex: 1;
 }
+
+.meta-expiry-btn {
+  cursor: pointer;
+  text-decoration: underline dotted;
+}
+.meta-expiry-btn:hover {
+  opacity: 0.7;
+}
+
 .room-header-right {
   display: flex;
   align-items: center;

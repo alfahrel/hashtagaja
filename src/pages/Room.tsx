@@ -13,6 +13,14 @@ import styles from './Room.module.css'
 const LINE_LIMIT = 5
 const CHAR_LIMIT = 400
 
+const EXPIRY_OPTIONS = [
+  { label: '1 hour', value: 1 * 60 * 60 * 1000 },
+  { label: '6 hours', value: 6 * 60 * 60 * 1000 },
+  { label: '24 hours', value: 24 * 60 * 60 * 1000 },
+  { label: '3 days', value: 3 * 24 * 60 * 60 * 1000 },
+  { label: '7 days', value: 7 * 24 * 60 * 60 * 1000 },
+]
+
 function isLong(text: string) {
   const lines = text.split('\n')
   return lines.length > LINE_LIMIT || text.length > CHAR_LIMIT
@@ -92,6 +100,8 @@ export function Room() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editText, setEditText] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [showExpiryPicker, setShowExpiryPicker] = useState(false)
+  const [updatingExpiry, setUpdatingExpiry] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -129,10 +139,7 @@ export function Room() {
       for (const item of Array.from(items)) {
         if (item.type.startsWith('image/')) {
           const file = item.getAsFile()
-          if (file) {
-            e.preventDefault()
-            handleFileSelected(file)
-          }
+          if (file) { e.preventDefault(); handleFileSelected(file) }
           break
         }
       }
@@ -179,6 +186,12 @@ export function Room() {
         setMessages(prev => prev.filter(m => m.id !== payload.old.id))
       })
       .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'rooms',
+        filter: `id=eq.${room.id}`
+      }, (payload) => {
+        setRoom(prev => prev ? { ...prev, ...payload.new as RoomType } : prev)
+      })
+      .on('postgres_changes', {
         event: 'DELETE', schema: 'public', table: 'rooms'
       }, () => {
         setRoomDeleted(true)
@@ -196,7 +209,7 @@ export function Room() {
 
     channelRef.current = channel
     return () => { channel.unsubscribe() }
-  }, [room, userId, scrollToBottom])
+  }, [room?.id, userId, scrollToBottom])
 
   useEffect(() => { scrollToBottom() }, [messages, scrollToBottom])
   useEffect(() => {
@@ -284,6 +297,27 @@ export function Room() {
       setMessages(msgs || [])
     } catch (err) { setError(c.errors.loadFailed); console.error(err) }
     finally { setLoading(false) }
+  }
+
+  async function updateExpiry(ms: number) {
+    if (!room) return
+    setUpdatingExpiry(true)
+    try {
+      const newExpiry = new Date(Date.now() + ms).toISOString()
+      const { error } = await supabase
+        .from('rooms')
+        .update({ expires_at: newExpiry })
+        .eq('id', room.id)
+        .eq('creator_id', userId)
+      if (error) throw error
+      setRoom(prev => prev ? { ...prev, expires_at: newExpiry } : prev)
+    } catch (err) {
+      setError(c.errors.loadFailed)
+      console.error(err)
+    } finally {
+      setUpdatingExpiry(false)
+      setShowExpiryPicker(false)
+    }
   }
 
   async function sendMessage() {
@@ -493,7 +527,11 @@ export function Room() {
             <div className={styles['room-meta']}>
               <span className={styles['meta-item']}><span className={`${styles['meta-dot']} ${styles.online}`} />{memberCount} {c.online}</span>
               <span className={styles['meta-sep']}>/</span>
-              <span className={`${styles['meta-item']} ${!timeLeft ? styles['meta-expired'] : ''}`}>
+              <span
+                className={`${styles['meta-item']} ${!timeLeft ? styles['meta-expired'] : ''} ${isCreator ? styles['meta-expiry-btn'] : ''}`}
+                onClick={() => isCreator && setShowExpiryPicker(true)}
+                title={isCreator ? 'change expiry' : undefined}
+              >
                 {timeLeft ? `${c.expiresIn} ${timeLeft}` : c.expired}
               </span>
               <span className={styles['meta-sep']}>/</span>
@@ -578,10 +616,7 @@ export function Room() {
                               <>
                                 {renderMessageContent(displayed)}
                                 {long && (
-                                  <span
-                                    className={styles['read-more']}
-                                    onClick={() => toggleExpand(msg.id)}
-                                  >
+                                  <span className={styles['read-more']} onClick={() => toggleExpand(msg.id)}>
                                     {expanded ? ' sembunyikan' : ' ...selengkapnya'}
                                   </span>
                                 )}
@@ -596,19 +631,10 @@ export function Room() {
 
                         {isSelf ? (
                           <div className={styles['msg-actions']}>
-                            <button
-                              className={styles['copy-btn']}
-                              onClick={() => copyMessage(msg.id, msg.content)}
-                              title={c.copyBtn}
-                            >
+                            <button className={styles['copy-btn']} onClick={() => copyMessage(msg.id, msg.content)} title={c.copyBtn}>
                               {copiedId === msg.id ? c.copiedBtn : c.copyBtn}
                             </button>
-                            <button
-                              className={styles['action-edit-btn']}
-                              onClick={() => startEdit(msg)}
-                            >
-                              Edit
-                            </button>
+                            <button className={styles['action-edit-btn']} onClick={() => startEdit(msg)}>Edit</button>
                             {deletingId === msg.id ? (
                               <>
                                 <span className={styles['delete-confirm-label']}>Hapus?</span>
@@ -620,11 +646,7 @@ export function Room() {
                             )}
                           </div>
                         ) : (
-                          <button
-                            className={styles['copy-btn']}
-                            onClick={() => copyMessage(msg.id, msg.content)}
-                            title={c.copyBtn}
-                          >
+                          <button className={styles['copy-btn']} onClick={() => copyMessage(msg.id, msg.content)} title={c.copyBtn}>
                             {copiedId === msg.id ? c.copiedBtn : c.copyBtn}
                           </button>
                         )}
@@ -666,6 +688,29 @@ export function Room() {
       </footer>
 
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+
+      {showExpiryPicker && isCreator && (
+        <div className={`${styles['confirm-overlay']} fade-in`} onClick={() => setShowExpiryPicker(false)}>
+          <div className={styles['confirm-box']} onClick={e => e.stopPropagation()}>
+            <p className={styles['confirm-title']}>set room expiry</p>
+            <p className={styles['confirm-desc']}>choose when this room auto-deletes from now.</p>
+            <div className={styles['confirm-actions']} style={{ flexDirection: 'column', gap: '8px' }}>
+              {EXPIRY_OPTIONS.map(opt => (
+                <button
+                  key={opt.value}
+                  className={styles['confirm-leave']}
+                  onClick={() => updateExpiry(opt.value)}
+                  disabled={updatingExpiry}
+                  style={{ width: '100%' }}
+                >
+                  {updatingExpiry ? '...' : opt.label}
+                </button>
+              ))}
+              <button className={styles['confirm-cancel']} onClick={() => setShowExpiryPicker(false)}>cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {confirmBack && room?.creator_id !== userId && (
         <div className={`${styles['confirm-overlay']} fade-in`} onClick={() => setConfirmBack(false)}>

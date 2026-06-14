@@ -65,11 +65,6 @@ export function Home() {
         <div className={`${styles['home-content']} fade-up`}>
           <div className={styles['home-title-block']}>
             <h1 className={styles['home-title']}>{c.title}</h1>
-            <p className={styles['home-desc']}>
-              {c.desc.map((line, i) => (
-                <span key={i}>{line}<br /></span>
-              ))}
-            </p>
           </div>
 
           <div className={styles['home-input-group']}>
@@ -96,17 +91,6 @@ export function Home() {
             {error && <p className={`${styles['home-error']} fade-in`}>{error}</p>}
           </div>
 
-          <div className={styles['home-features']}>
-            <p className={styles['home-features-title']}>{c.featuresTitle}</p>
-            <div className={styles['home-hints']}>
-              {c.hints.map((hint, i) => (
-                <span key={i} className={styles['hint-item']}>
-                  <span className={styles['hint-dot']} />
-                  {hint}
-                </span>
-              ))}
-            </div>
-          </div>
         </div>
       </main>
 
