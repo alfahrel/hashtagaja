@@ -34,35 +34,37 @@ interface OnlineRoom {
 export function AdminDashboard() {
   const navigate = useNavigate()
 
-  // Rooms
   const [rooms, setRooms] = useState<Room[]>([])
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null)
   const [loadingRooms, setLoadingRooms] = useState(true)
   const [search, setSearch] = useState('')
 
-  // Multi-select rooms
   const [selectedRoomIds, setSelectedRoomIds] = useState<Set<string>>(new Set())
   const [multiSelectMode, setMultiSelectMode] = useState(false)
 
-  // Messages
   const [messages, setMessages] = useState<Message[]>([])
   const [loadingMessages, setLoadingMessages] = useState(false)
 
-  // Multi-select messages
   const [selectedMsgIds, setSelectedMsgIds] = useState<Set<string>>(new Set())
 
-  // Online monitoring
   const [onlineRooms, setOnlineRooms] = useState<OnlineRoom[]>([])
   const [totalOnline, setTotalOnline] = useState(0)
   const [activeTab, setActiveTab] = useState<'rooms' | 'online'>('rooms')
-  // UI state
+
   const [toast, setToast] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<{ type: 'room' | 'message' | 'rooms' | 'messages'; ids: string[]; label: string } | null>(null)
   const [deleting, setDeleting] = useState(false)
 
+  const [tick, setTick] = useState(0)
+
   useTitle(selectedRoom ? `#${selectedRoom.hashtag} — admin` : 'admin — hashtagaja')
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000) }
+
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 30000)
+    return () => clearInterval(id)
+  }, [])
 
   const loadRooms = useCallback(async () => {
     setLoadingRooms(true)
@@ -78,17 +80,21 @@ export function AdminDashboard() {
     setLoadingMessages(false)
   }, [])
 
-  // Realtime: listen for new/deleted rooms and new messages globally
   useEffect(() => {
     const channel = supabase.channel('admin-realtime')
-      // New room created
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'rooms' },
         (payload) => {
           setRooms(prev => [payload.new as Room, ...prev])
           showToast(`ruangan baru: #${(payload.new as Room).hashtag}`)
         }
       )
-      // Room deleted
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms' },
+        (payload) => {
+          const updated = payload.new as Room
+          setRooms(prev => prev.map(r => r.id === updated.id ? { ...r, ...updated } : r))
+          setSelectedRoom(prev => prev?.id === updated.id ? { ...prev, ...updated } : prev)
+        }
+      )
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'rooms' },
         (payload) => {
           const deleted = payload.old as Room
@@ -96,19 +102,17 @@ export function AdminDashboard() {
           setSelectedRoom(prev => prev?.id === deleted.id ? null : prev)
         }
       )
-      // New message in selected room
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' },
         (payload) => {
           const msg = payload.new as Message
           setMessages(prev => {
-            if (!prev.length) return prev // no room selected
-            if (prev[0]?.room_id !== msg.room_id) return prev // different room
-            if (prev.some(m => m.id === msg.id)) return prev // dedupe
+            if (!prev.length) return prev
+            if (prev[0]?.room_id !== msg.room_id) return prev
+            if (prev.some(m => m.id === msg.id)) return prev
             return [...prev, msg]
           })
         }
       )
-      // Message deleted
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' },
         (payload) => {
           const deleted = payload.old as Message
@@ -120,7 +124,6 @@ export function AdminDashboard() {
     return () => { channel.unsubscribe() }
   }, [])
 
-  // Presence monitoring — subscribe to each room channel
   useEffect(() => {
     if (rooms.length === 0) return
 
@@ -134,10 +137,6 @@ export function AdminDashboard() {
           if (count > 0) return [...filtered, { roomId: room.id, hashtag: room.hashtag, userCount: count }]
           return filtered
         })
-        setTotalOnline(prev => {
-          // recalculate from all rooms
-          return prev // will be updated by setOnlineRooms
-        })
       })
       ch.subscribe()
       return ch
@@ -146,7 +145,6 @@ export function AdminDashboard() {
     return () => { presenceChannels.forEach(ch => ch.unsubscribe()) }
   }, [rooms])
 
-  // Keep totalOnline in sync with onlineRooms
   useEffect(() => {
     setTotalOnline(onlineRooms.reduce((sum, r) => sum + r.userCount, 0))
   }, [onlineRooms])
@@ -158,12 +156,10 @@ export function AdminDashboard() {
     setSelectedMsgIds(new Set())
   }, [selectedRoom, loadMessages])
 
-  // Reset multi-select when leaving mode
   useEffect(() => {
     if (!multiSelectMode) setSelectedRoomIds(new Set())
   }, [multiSelectMode])
 
-  // --- Delete single room ---
   async function deleteRoomById(id: string) {
     const { data: files } = await supabase.storage.from('room-files').list(id)
     if (files && files.length > 0) {
@@ -174,7 +170,6 @@ export function AdminDashboard() {
     if (selectedRoom?.id === id) setSelectedRoom(null)
   }
 
-  // --- Delete multiple rooms ---
   async function deleteSelectedRooms(ids: string[]) {
     setDeleting(true)
     try {
@@ -186,13 +181,11 @@ export function AdminDashboard() {
     finally { setDeleting(false); setConfirmDelete(null) }
   }
 
-  // --- Delete single message ---
   async function deleteMessageById(id: string) {
     await supabase.from('messages').delete().eq('id', id)
     setMessages(prev => prev.filter(m => m.id !== id))
   }
 
-  // --- Delete multiple messages ---
   async function deleteSelectedMessages(ids: string[]) {
     setDeleting(true)
     try {
@@ -239,7 +232,6 @@ export function AdminDashboard() {
   return (
     <div className={styles.dashboard}>
 
-      {/* ── Sidebar ── */}
       <aside className={styles['dashboard-sidebar']}>
         <div className={styles['sidebar-header']}>
           <span className={styles['sidebar-logo']}>{content.logo}</span>
@@ -247,7 +239,6 @@ export function AdminDashboard() {
           <ThemeToggle />
         </div>
 
-        {/* Tabs */}
         <div className={styles['sidebar-tabs']}>
           <button
             className={`${styles['sidebar-tab']} ${activeTab === 'rooms' ? styles.active : ''}`}
@@ -286,7 +277,6 @@ export function AdminDashboard() {
               </div>
             </div>
 
-            {/* Multi-select toolbar */}
             <div className={styles['sidebar-toolbar']}>
               <button
                 className={`${styles['toolbar-btn']} ${multiSelectMode ? styles.active : ''}`}
@@ -363,7 +353,6 @@ export function AdminDashboard() {
         </div>
       </aside>
 
-      {/* ── Main ── */}
       <main className={styles['dashboard-main']}>
         {!selectedRoom ? (
           <div className={styles['dashboard-empty']}>
@@ -377,7 +366,7 @@ export function AdminDashboard() {
                 <div className={styles['room-detail-meta']}>
                   <span>{c.room.created} {formatDate(selectedRoom.created_at)}</span>
                   <span className={styles['meta-sep']}>/</span>
-                  <span>{new Date(selectedRoom.expires_at) <= new Date() ? c.expired : `${c.room.expiresIn} ${formatExpiry(selectedRoom.expires_at)}`}</span>
+                  <span>{new Date(selectedRoom.expires_at) <= new Date() ? c.room.expired : `${c.room.expiresIn} ${formatExpiry(selectedRoom.expires_at)}`}</span>
                   <span className={styles['meta-sep']}>/</span>
                   <span>{messages.length} {c.room.messages}</span>
                 </div>
@@ -390,7 +379,6 @@ export function AdminDashboard() {
 
             <div className={styles['room-detail-body']}>
 
-              {/* Messages section */}
               <section className={styles['detail-section']}>
                 <div className={styles['detail-section-header']}>
                   <h3 className={styles['detail-section-title']}>
@@ -440,7 +428,6 @@ export function AdminDashboard() {
                 )}
               </section>
 
-              {/* Files section */}
               <section className={styles['detail-section']}>
                 <div className={styles['detail-section-header']}>
                   <h3 className={styles['detail-section-title']}>
@@ -482,7 +469,6 @@ export function AdminDashboard() {
         )}
       </main>
 
-      {/* Confirm dialog */}
       {confirmDelete && (
         <div className={`${styles['confirm-overlay']} fade-in`} onClick={() => !deleting && setConfirmDelete(null)}>
           <div className={styles['confirm-box']} onClick={e => e.stopPropagation()}>

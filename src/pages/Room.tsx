@@ -13,14 +13,6 @@ import styles from './Room.module.css'
 const LINE_LIMIT = 5
 const CHAR_LIMIT = 400
 
-const EXPIRY_OPTIONS = [
-  { label: '1 hour', value: 1 * 60 * 60 * 1000 },
-  { label: '6 hours', value: 6 * 60 * 60 * 1000 },
-  { label: '24 hours', value: 24 * 60 * 60 * 1000 },
-  { label: '3 days', value: 3 * 24 * 60 * 60 * 1000 },
-  { label: '7 days', value: 7 * 24 * 60 * 60 * 1000 },
-]
-
 function isLong(text: string) {
   const lines = text.split('\n')
   return lines.length > LINE_LIMIT || text.length > CHAR_LIMIT
@@ -530,7 +522,7 @@ export function Room() {
               <span
                 className={`${styles['meta-item']} ${!timeLeft ? styles['meta-expired'] : ''} ${isCreator ? styles['meta-expiry-btn'] : ''}`}
                 onClick={() => isCreator && setShowExpiryPicker(true)}
-                title={isCreator ? 'change expiry' : undefined}
+                title={isCreator ? c.expiryPickerTitle : undefined}
               >
                 {timeLeft ? `${c.expiresIn} ${timeLeft}` : c.expired}
               </span>
@@ -692,10 +684,10 @@ export function Room() {
       {showExpiryPicker && isCreator && (
         <div className={`${styles['confirm-overlay']} fade-in`} onClick={() => setShowExpiryPicker(false)}>
           <div className={styles['confirm-box']} onClick={e => e.stopPropagation()}>
-            <p className={styles['confirm-title']}>set room expiry</p>
-            <p className={styles['confirm-desc']}>choose when this room auto-deletes from now.</p>
+            <p className={styles['confirm-title']}>{c.expiryPickerTitle}</p>
+            <p className={styles['confirm-desc']}>{c.expiryPickerDesc}</p>
             <div className={styles['confirm-actions']} style={{ flexDirection: 'column', gap: '8px' }}>
-              {EXPIRY_OPTIONS.map(opt => (
+              {c.expiryOptions.map(opt => (
                 <button
                   key={opt.value}
                   className={styles['confirm-leave']}
@@ -706,7 +698,7 @@ export function Room() {
                   {updatingExpiry ? '...' : opt.label}
                 </button>
               ))}
-              <button className={styles['confirm-cancel']} onClick={() => setShowExpiryPicker(false)}>cancel</button>
+              <button className={styles['confirm-cancel']} onClick={() => setShowExpiryPicker(false)}>{c.expiryPickerCancel}</button>
             </div>
           </div>
         </div>

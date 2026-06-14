@@ -70,6 +70,16 @@ const id = {
     deleteRoomConfirm: 'ya, tutup',
     deleteRoomCancel: 'batal',
     fileSizeWarningCancel: 'batal',
+    expiryPickerTitle: 'atur waktu kadaluwarsa',
+    expiryPickerDesc: 'pilih kapan ruangan ini otomatis terhapus dari sekarang.',
+    expiryPickerCancel: 'batal',
+    expiryOptions: [
+      { label: '1 jam', value: 3600000 },
+      { label: '6 jam', value: 21600000 },
+      { label: '24 jam', value: 86400000 },
+      { label: '3 hari', value: 259200000 },
+      { label: '7 hari', value: 604800000 },
+    ],
     errors: {
       loadFailed: 'gagal memuat ruangan. periksa koneksi kamu.',
       sendFailed: 'gagal mengirim pesan',
@@ -194,6 +204,16 @@ const en: typeof id = {
     deleteRoomConfirm: 'yes, close',
     deleteRoomCancel: 'cancel',
     fileSizeWarningCancel: 'cancel',
+    expiryPickerTitle: 'set room expiry',
+    expiryPickerDesc: 'choose when this room auto-deletes from now.',
+    expiryPickerCancel: 'cancel',
+    expiryOptions: [
+      { label: '1 hour', value: 3600000 },
+      { label: '6 hours', value: 21600000 },
+      { label: '24 hours', value: 86400000 },
+      { label: '3 days', value: 259200000 },
+      { label: '7 days', value: 604800000 },
+    ],
     errors: {
       loadFailed: 'failed to load room. check your connection.',
       sendFailed: 'failed to send message',
@@ -254,5 +274,4 @@ export function getContent(lang: Language) {
   return translations[lang] ?? translations.id
 }
 
-// default export for pages that don't have settings yet (admin)
 export const content = id
