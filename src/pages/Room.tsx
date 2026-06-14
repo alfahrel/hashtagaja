@@ -13,7 +13,6 @@ import styles from './Room.module.css'
 const LINE_LIMIT = 5
 const CHAR_LIMIT = 400
 
-
 function isLong(text: string) {
   const lines = text.split('\n')
   return lines.length > LINE_LIMIT || text.length > CHAR_LIMIT
@@ -29,10 +28,9 @@ function formatTime(dateStr: string) {
   return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
 }
 
-
 function formatExpiry(dateStr: string) {
   const diff = new Date(dateStr).getTime() - Date.now()
-  if (diff <= 0) return null // expired
+  if (diff <= 0) return null
   const h = Math.floor(diff / 3600000)
   const m = Math.floor((diff % 3600000) / 60000)
   const s = Math.floor((diff % 60000) / 1000)
@@ -40,11 +38,13 @@ function formatExpiry(dateStr: string) {
   if (m > 0) return `${m}m ${s}s`
   return `${s}s`
 }
+
 function formatFileSize(bytes: number) {
   if (bytes < 1024) return `${bytes}b`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}kb`
   return `${(bytes / (1024 * 1024)).toFixed(1)}mb`
 }
+
 function renderMessageContent(text: string) {
   const urlRegex = /(https?:\/\/[^\s]+)/g
   const parts = text.split(urlRegex)
@@ -89,8 +89,6 @@ export function Room() {
   const [roomExpired, setRoomExpired] = useState(false)
   const [confirmDeleteRoom, setConfirmDeleteRoom] = useState(false)
   const [deletingRoom, setDeletingRoom] = useState(false)
-
-  // ── Edit & Delete state ──
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editText, setEditText] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -99,7 +97,7 @@ export function Room() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
-  
+
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
 
   function toggleExpand(id: string) {
@@ -124,6 +122,25 @@ export function Room() {
     return () => window.removeEventListener('keydown', handleGlobalKey)
   }, [])
 
+  useEffect(() => {
+    async function handlePaste(e: ClipboardEvent) {
+      const items = e.clipboardData?.items
+      if (!items) return
+      for (const item of Array.from(items)) {
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile()
+          if (file) {
+            e.preventDefault()
+            handleFileSelected(file)
+          }
+          break
+        }
+      }
+    }
+    window.addEventListener('paste', handlePaste)
+    return () => window.removeEventListener('paste', handlePaste)
+  }, [room, uploading])
+
   useEffect(() => { if (!hashtag) return; initRoom() }, [hashtag])
 
   useEffect(() => {
@@ -140,7 +157,6 @@ export function Room() {
     if (!room) return
 
     const channel = supabase.channel(`room:${room.id}`)
-      // New messages
       .on('postgres_changes', {
         event: 'INSERT', schema: 'public', table: 'messages',
         filter: `room_id=eq.${room.id}`
@@ -148,7 +164,6 @@ export function Room() {
         setMessages(prev => [...prev, payload.new as Message])
         setTimeout(scrollToBottom, 50)
       })
-      // Message updated (edit)
       .on('postgres_changes', {
         event: 'UPDATE', schema: 'public', table: 'messages',
         filter: `room_id=eq.${room.id}`
@@ -157,20 +172,17 @@ export function Room() {
           m.id === payload.new.id ? { ...m, ...payload.new as Message } : m
         ))
       })
-      // Message deleted
       .on('postgres_changes', {
         event: 'DELETE', schema: 'public', table: 'messages',
         filter: `room_id=eq.${room.id}`
       }, (payload) => {
         setMessages(prev => prev.filter(m => m.id !== payload.old.id))
       })
-      // Room deleted — redirect guests
       .on('postgres_changes', {
         event: 'DELETE', schema: 'public', table: 'rooms'
       }, () => {
         setRoomDeleted(true)
       })
-      // Presence — track online members
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState<{ user_id: string }>()
         const onlineUsers = Object.values(state).flat().map(p => p.user_id)
@@ -191,14 +203,12 @@ export function Room() {
     if (!loading && room) setTimeout(() => textareaRef.current?.focus(), 100)
   }, [loading, room])
 
-  // Auto-redirect when room is deleted
   useEffect(() => {
     if (!roomDeleted) return
     const t = setTimeout(() => navigate('/'), 3000)
     return () => clearTimeout(t)
   }, [roomDeleted, navigate])
 
-  // When room expires, owner's browser deletes it (triggers realtime DELETE for guests)
   useEffect(() => {
     if (!roomExpired || !isCreator || !room) return
     async function cleanup() {
@@ -291,7 +301,6 @@ export function Room() {
     finally { setSending(false); setTimeout(() => textareaRef.current?.focus(), 0) }
   }
 
-  // ── Edit handlers ──
   function startEdit(msg: Message) {
     setEditingId(msg.id)
     setEditText(msg.content)
@@ -320,7 +329,6 @@ export function Room() {
     }
   }
 
-  // ── Delete handler ──
   async function deleteMessage(msgId: string) {
     try {
       const { error } = await supabase
@@ -465,7 +473,6 @@ export function Room() {
         </div>
       )}
 
-      {/* Room deleted dialog */}
       {roomDeleted && (
         <div className={`${styles['confirm-overlay']} fade-in`}>
           <div className={styles['confirm-box']} onClick={e => e.stopPropagation()}>
@@ -544,7 +551,6 @@ export function Room() {
                         </div>
                       </a>
                     ) : editingId === msg.id ? (
-                      /* ── Mode Edit ── */
                       <div className={styles['edit-wrap']}>
                         <textarea
                           className={styles['edit-textarea']}
@@ -562,7 +568,6 @@ export function Room() {
                         </div>
                       </div>
                     ) : (
-                      /* ── Bubble Normal ── */
                       <div className={`${styles['msg-bubble-wrap']} ${isSelf ? styles.self : styles.other}`}>
                         <div className={`${styles['msg-bubble']} ${styles['text-bubble']} ${isSelf ? styles.self : styles.other}`}>
                           {(() => {
@@ -589,7 +594,6 @@ export function Room() {
                           })()}
                         </div>
 
-                        {/* Tombol aksi — hanya untuk pesan sendiri */}
                         {isSelf ? (
                           <div className={styles['msg-actions']}>
                             <button
@@ -661,10 +665,8 @@ export function Room() {
         <p className={styles['room-input-hint']}>{c.inputHint}</p>
       </footer>
 
-      {/* Settings modal */}
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
 
-      {/* Confirm leave — guests only */}
       {confirmBack && room?.creator_id !== userId && (
         <div className={`${styles['confirm-overlay']} fade-in`} onClick={() => setConfirmBack(false)}>
           <div className={styles['confirm-box']} onClick={e => e.stopPropagation()}>
@@ -678,7 +680,6 @@ export function Room() {
         </div>
       )}
 
-      {/* Confirm delete room */}
       {confirmDeleteRoom && (
         <div className={`${styles['confirm-overlay']} fade-in`} onClick={() => setConfirmDeleteRoom(false)}>
           <div className={styles['confirm-box']} onClick={e => e.stopPropagation()}>
@@ -694,7 +695,6 @@ export function Room() {
         </div>
       )}
 
-      {/* Room deleted dialog — shown to guests */}
       {roomDeleted && !isCreator && (
         <div className={`${styles['confirm-overlay']} fade-in`}>
           <div className={styles['confirm-box']} onClick={e => e.stopPropagation()}>
@@ -707,7 +707,6 @@ export function Room() {
         </div>
       )}
 
-      {/* Room expired dialog */}
       {roomExpired && (
         <div className={`${styles['confirm-overlay']} fade-in`}>
           <div className={styles['confirm-box']} onClick={e => e.stopPropagation()}>
@@ -720,7 +719,6 @@ export function Room() {
         </div>
       )}
 
-      {/* File size warning >10mb */}
       {fileSizeWarning && (
         <div className={`${styles['confirm-overlay']} fade-in`} onClick={() => setFileSizeWarning(null)}>
           <div className={styles['confirm-box']} onClick={e => e.stopPropagation()}>
